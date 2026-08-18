@@ -1,0 +1,455 @@
+import os
+import glob
+import re
+import chromadb
+from sentence_transformers import SentenceTransformer
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
+# ============================================================
+# 1. PROJECT PATHS
+# ============================================================
+
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+DATA_DIR = os.path.join(BASE_DIR, "data")
+CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
+
+
+# ============================================================
+# 2. SETTINGS
+# ============================================================
+
+COLLECTION_NAME = "solar_pakistan_knowledge"
+
+CHUNK_SIZE = 700
+CHUNK_OVERLAP = 100
+
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+# ============================================================
+# 3. LOAD MARKDOWN FILES
+# ============================================================
+
+def load_markdown_files():
+
+    documents = []
+
+    md_files = glob.glob(
+        os.path.join(DATA_DIR, "*.md")
+    )
+
+    print(f"\nFound {len(md_files)} Markdown files.")
+
+    for file_path in md_files:
+
+        with open(
+            file_path,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            text = file.read()
+
+        documents.append({
+            "text": text,
+            "source": os.path.basename(file_path)
+        })
+
+        print(
+            "Loaded:",
+            os.path.basename(file_path)
+        )
+
+    return documents
+
+
+# ============================================================
+# 4. SPLIT MARKDOWN INTO SECTIONS
+# ============================================================
+
+def split_markdown_sections(text: str):
+
+    """
+    Split Markdown content by headings.
+
+    Returns:
+    [
+        {
+            "section": "System Types",
+            "text": "## System Types ..."
+        }
+    ]
+    """
+
+    lines = text.splitlines()
+
+    sections = []
+
+    current_heading = "General"
+    current_lines = []
+
+    heading_pattern = re.compile(
+        r"^(#{1,6})\s+(.+)$"
+    )
+
+    def save_section():
+
+        if not current_lines:
+            return
+
+        section_text = "\n".join(
+            current_lines
+        ).strip()
+
+        if section_text:
+            sections.append({
+                "section": current_heading,
+                "text": section_text
+            })
+
+    for line in lines:
+
+        match = heading_pattern.match(
+            line.strip()
+        )
+
+        if match:
+
+            save_section()
+
+            current_heading = (
+                match.group(2).strip()
+            )
+
+            current_lines = [line]
+
+        else:
+
+            current_lines.append(line)
+
+    save_section()
+
+    return sections
+
+
+# ============================================================
+# 5. CREATE CHUNKS
+# ============================================================
+
+def create_chunks(documents):
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=[
+            "\n\n",
+            "\n",
+            ". ",
+            " ",
+            ""
+        ]
+    )
+
+    chunks = []
+
+    for document in documents:
+
+        sections = split_markdown_sections(
+            document["text"]
+        )
+
+        file_chunk_id = 0
+
+        for section in sections:
+
+            section_text = section["text"]
+
+            split_texts = splitter.split_text(
+                section_text
+            )
+
+            for text in split_texts:
+
+                chunks.append({
+                    "text": text,
+                    "source": document["source"],
+                    "section": section["section"],
+                    "chunk_id": file_chunk_id
+                })
+
+                file_chunk_id += 1
+
+    print(
+        f"\nTotal chunks created: {len(chunks)}"
+    )
+
+    return chunks
+
+
+# ============================================================
+# 6. GENERATE EMBEDDINGS
+# ============================================================
+
+def generate_embeddings(chunks):
+
+    print("\nLoading embedding model...")
+
+    model = SentenceTransformer(
+        EMBEDDING_MODEL
+    )
+
+    print(
+        "Embedding model loaded successfully!"
+    )
+
+    texts = [
+        chunk["text"]
+        for chunk in chunks
+    ]
+
+    embeddings = model.encode(
+        texts,
+        show_progress_bar=True,
+        convert_to_numpy=True
+    )
+
+    print(
+        f"\nEmbeddings generated: {len(embeddings)}"
+    )
+
+    print(
+        f"Embedding dimension: {embeddings.shape[1]}"
+    )
+
+    return embeddings
+
+
+# ============================================================
+# 7. STORE IN CHROMADB
+# ============================================================
+
+def store_in_chromadb(
+    chunks,
+    embeddings
+):
+
+    print("\nCreating ChromaDB...")
+
+    client = chromadb.PersistentClient(
+        path=CHROMA_DIR
+    )
+
+    # Remove previous collection to prevent duplicates
+    try:
+        client.delete_collection(
+            name=COLLECTION_NAME
+        )
+
+        print(
+            "Old collection removed."
+        )
+
+    except Exception:
+        pass
+
+    collection = client.create_collection(
+        name=COLLECTION_NAME,
+        metadata={
+            "description":
+                "Solar Pakistan knowledge base"
+        }
+    )
+
+    ids = []
+    documents = []
+    metadatas = []
+    vectors = []
+
+    for index, chunk in enumerate(chunks):
+
+        ids.append(
+            f"{chunk['source']}_"
+            f"{chunk['chunk_id']}_"
+            f"{index}"
+        )
+
+        documents.append(
+            chunk["text"]
+        )
+
+        metadatas.append({
+            "source": chunk["source"],
+            "section": chunk["section"],
+            "chunk_id": chunk["chunk_id"]
+        })
+
+        vectors.append(
+            embeddings[index].tolist()
+        )
+
+    collection.add(
+        ids=ids,
+        documents=documents,
+        metadatas=metadatas,
+        embeddings=vectors
+    )
+
+    print(
+        "\nChromaDB storage completed!"
+    )
+
+    print(
+        "Total stored chunks:",
+        collection.count()
+    )
+
+    print(
+        "ChromaDB location:",
+        CHROMA_DIR
+    )
+
+
+# ============================================================
+# 8. TEST RETRIEVAL
+# ============================================================
+
+def test_retrieval():
+
+    print("\nTesting retrieval...")
+
+    model = SentenceTransformer(
+        EMBEDDING_MODEL
+    )
+
+    client = chromadb.PersistentClient(
+        path=CHROMA_DIR
+    )
+
+    collection = client.get_collection(
+        name=COLLECTION_NAME
+    )
+
+    question = (
+        "What are the solar system types in Pakistan?"
+    )
+
+    query_embedding = model.encode(
+        [question],
+        convert_to_numpy=True
+    )[0]
+
+    results = collection.query(
+        query_embeddings=[
+            query_embedding.tolist()
+        ],
+        n_results=5
+    )
+
+    print(
+        "\nQuestion:",
+        question
+    )
+
+    for i in range(
+        len(results["documents"][0])
+    ):
+
+        metadata = (
+            results["metadatas"][0][i]
+        )
+
+        print(
+            "\n-----------------------------"
+        )
+
+        print(
+            f"Result {i + 1}"
+        )
+
+        print(
+            "Source:",
+            metadata.get(
+                "source"
+            )
+        )
+
+        print(
+            "Section:",
+            metadata.get(
+                "section"
+            )
+        )
+
+        print(
+            "Distance:",
+            results["distances"][0][i]
+        )
+
+        print(
+            "Content:",
+            results["documents"][0][i][:400]
+        )
+
+
+# ============================================================
+# 9. MAIN
+# ============================================================
+
+def main():
+
+    print("=" * 60)
+
+    print(
+        "SOLAR PAKISTAN - CHROMADB INGESTION"
+    )
+
+    print("=" * 60)
+
+    documents = load_markdown_files()
+
+    if not documents:
+
+        print(
+            "\nERROR: No Markdown files found!"
+        )
+
+        print(
+            "Check the backend/data folder."
+        )
+
+        return
+
+    chunks = create_chunks(
+        documents
+    )
+
+    embeddings = generate_embeddings(
+        chunks
+    )
+
+    store_in_chromadb(
+        chunks,
+        embeddings
+    )
+
+    test_retrieval()
+
+    print(
+        "\n" + "=" * 60
+    )
+
+    print(
+        "INGESTION COMPLETED SUCCESSFULLY!"
+    )
+
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
