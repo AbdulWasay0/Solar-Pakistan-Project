@@ -10,7 +10,7 @@ from .schemas import RecommendationRequest, RecommendationResponse
 
 app = FastAPI(title="Solar AI Pakistan API", version="1.0")
 
-allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "https://solar-pakistan-project.vercel.app"]
 frontend_url = os.getenv("FRONTEND_URL")
 if frontend_url:
     allowed_origins.append(frontend_url)
@@ -39,3 +39,4 @@ def knowledge():
 @app.post("/recommend", response_model=RecommendationResponse)
 def recommend(data: RecommendationRequest):
     return make_recommendation(data)
+
