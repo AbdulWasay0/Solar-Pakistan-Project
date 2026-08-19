@@ -47,6 +47,12 @@ SOLAR_TERMS = {
 }
 
 
+def is_greeting(question: str) -> bool:
+    normalized = question.lower().strip(" .,!?")
+    greetings = {"hi", "hello", "hey", "salam", "assalamualaikum", "assalamu alaikum"}
+    return normalized in greetings
+
+
 def is_solar_question(question: str) -> bool:
     """
     Basic domain guard.
