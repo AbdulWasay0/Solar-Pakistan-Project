@@ -9,16 +9,16 @@ python -m app.ingest
 python -m uvicorn main:app --reload --port 8000
 ```
 
-## Ollama Setup
+## Gemini Setup
 
-Install Ollama, then run:
+Create `backend/.env`:
 
-```powershell
-ollama pull llama3.2:1b
-ollama serve
+```env
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
-If `ollama serve` says Ollama is already running, that is fine.
+The chatbot does not use Gemini web search. It sends Gemini only the chunks retrieved from the local ChromaDB knowledge base.
 
 ## Frontend Setup
 
@@ -30,27 +30,17 @@ npm install
 npm run dev
 ```
 
-Open the shown local URL, usually:
-
-```txt
-http://localhost:5173
-```
+Open the shown local URL, usually `http://localhost:5173`.
 
 ## Manual API Tests
-
-Health:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
-Chat:
-
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/chat" -ContentType "application/json" -Body '{"message":"What size solar system do I need for 600 monthly units?"}'
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/chat" -ContentType "application/json" -Body '{"message":"What is a hybrid solar system?"}'
 ```
-
-Recommendation:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/recommend" -ContentType "application/json" -Body '{"monthly_units":600,"city":"Lahore","roof_area_sqft":500,"backup_hours":4,"battery_required":true,"major_loads":[{"name":"Fan","watts":80,"quantity":3}],"system_preference":"auto","grid_available":true,"panel_watt":585}'

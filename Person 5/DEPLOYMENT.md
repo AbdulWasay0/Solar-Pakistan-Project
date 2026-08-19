@@ -1,52 +1,42 @@
 ﻿# Person 5 - Deployment Guide
 
 ## Frontend
-
 Recommended: Vercel or Netlify.
 
 Build command:
-
 ```txt
 npm run build
 ```
 
-Publish/build folder depends on TanStack Start output. Verify with the frontend README/build output before deployment.
+Set this env var if backend is deployed:
+```txt
+VITE_API_URL=https://your-render-backend.onrender.com
+```
 
 ## Backend
-
-Recommended: Render, Railway, or Fly.io.
+Recommended: Render free web service.
 
 Start command:
-
 ```txt
 uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-Before deployment, run ingestion once so `backend/chroma_db/` exists, or upload/preserve it as persistent storage.
+Render environment variables:
+```txt
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.6-flash
+```
 
 ## ChromaDB
-
 Current project uses local persisted ChromaDB:
-
 ```txt
 backend/chroma_db/
 ```
 
-For production, either:
-
-- use persistent disk on Render/Railway/Fly.io, or
-- migrate later to hosted Chroma/Chroma Cloud.
+For Render free, run ingestion during setup/start or later migrate to hosted Chroma/Chroma Cloud.
 
 ## LLM
+Current project uses Gemini API. It does not use web search. Backend sends only retrieved RAG chunks to Gemini.
 
-Current project uses local Ollama:
-
-```txt
-http://localhost:11434/api/generate
-```
-
-For production, replace Ollama with OpenAI/Gemini or deploy Ollama on the same server/private network.
-
-## Environment Notes
-
-Never commit real API keys or `.env` files. Keep generated folders out of Git unless intentionally needed for demo deployment.
+## Security
+Never commit `.env` or real API keys.

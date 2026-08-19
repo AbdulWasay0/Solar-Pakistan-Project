@@ -1,10 +1,14 @@
 ﻿import json
-import urllib.request
+import os
 import urllib.error
+import urllib.parse
+import urllib.request
 
+from dotenv import load_dotenv
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3.2:1b"
+load_dotenv(override=True)
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 FALLBACK = (
     "I don't have enough information in the Solar Pakistan "
     "knowledge base to answer that."
@@ -12,64 +16,48 @@ FALLBACK = (
 
 
 def generate_answer(question: str, chunks: list) -> str:
-    """
-    Generate a grounded answer using Ollama and
-    knowledge retrieved from ChromaDB.
-    """
-
+    """Generate a grounded answer using only retrieved RAG chunks."""
     if not chunks:
         return FALLBACK
 
     context_parts = []
-
     for index, chunk in enumerate(chunks, start=1):
         source = chunk.get("source", "unknown")
-        content = chunk.get("content", "")
-
-        if content.strip():
-            context_parts.append(f"[Source {index}: {source}]\n{content}")
+        section = chunk.get("section", "General")
+        content = chunk.get("content", "").strip()
+        if content:
+            context_parts.append(f"[Source {index}: {source} | {section}]\n{content}")
 
     if not context_parts:
         return FALLBACK
 
-    context = "\n\n".join(context_parts)
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return "Gemini is not configured. Add GEMINI_API_KEY to backend/.env."
 
     prompt = f"""
 You are Solar AI Pakistan.
+Use ONLY the retrieved knowledge base below. Do not use web search, tools, or outside knowledge.
+If the answer is not clearly present in the retrieved knowledge, reply exactly:
+{FALLBACK}
 
-Answer the user's question using the RETRIEVED KNOWLEDGE below.
+Retrieved knowledge:
+{chr(10).join(context_parts)}
 
-RETRIEVED KNOWLEDGE:
---------------------
-{context}
---------------------
+Question: {question}
 
-USER QUESTION:
-{question}
-
-RULES:
-1. Use the retrieved knowledge as your source.
-2. If relevant information is present, answer clearly and directly.
-3. You may combine relevant information from multiple retrieved passages.
-4. Ignore passages that are unrelated to the question.
-5. Do not invent prices, specifications, regulations, warranties,
-   or technical facts that are not supported by the retrieved knowledge.
-6. Keep the answer concise.
-7. If the retrieved knowledge contains no relevant information at all,
-   respond exactly:
-"{FALLBACK}"
-
-ANSWER:
+Answer clearly and briefly. Include practical cautions when the knowledge says the estimate is initial only.
 """
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.0, "num_predict": 180},
-    }
 
+    model = urllib.parse.quote(GEMINI_MODEL, safe="")
+    key = urllib.parse.quote(api_key, safe="")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 350},
+    }
     request = urllib.request.Request(
-        OLLAMA_URL,
+        url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -77,28 +65,14 @@ ANSWER:
 
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            answer = result.get("response", "").strip()
-
-        fallback_variants = [
-            FALLBACK,
-            "I do not have enough information in the Solar Pakistan knowledge base to answer that.",
-        ]
-
-        for fallback in fallback_variants:
-            if fallback in answer and answer.strip() != fallback:
-                answer = answer.replace(fallback, "").strip()
-
-        prefixes = [
-            "I am Solar AI Pakistan.",
-            "I am Solar AI Pakistan.\n",
-            "Based on the retrieved knowledge,",
-        ]
-
-        for prefix in prefixes:
-            if answer.startswith(prefix):
-                answer = answer[len(prefix):].strip()
-
+            data = json.loads(response.read().decode("utf-8"))
+        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        answer = "".join(part.get("text", "") for part in parts).strip()
         return answer or FALLBACK
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Gemini API error {error.code}: {detail}")
     except urllib.error.URLError as error:
-        raise RuntimeError(f"Could not connect to Ollama: {error}")
+        raise RuntimeError(f"Could not connect to Gemini: {error}")
+
+

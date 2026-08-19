@@ -1,37 +1,29 @@
 ﻿# Person 5 - README
 
-This folder contains the final testing, documentation, and deployment deliverables.
+This folder contains final testing, setup, and deployment deliverables.
 
 ## Files
-
 - `TEST_CASES.md` - 32 chatbot test questions
-- `TEST_REPORT.md` - verification report with results
-- `SETUP.md` - full local run commands
-- `DEPLOYMENT.md` - deployment plan
+- `TEST_REPORT.md` - verification report
+- `SETUP.md` - local run guide
+- `DEPLOYMENT.md` - Render/Vercel deployment guide
 - `ARCHITECTURE.md` - Mermaid architecture diagram
 - `smoke_test.py` - quick API test script
 
-## Final Project Status
-
-Persons 1-4 are connected in the project. Person 5 adds proof, setup, and deployment docs.
-
-Before demo, run:
-
+## Before Demo
 ```powershell
 cd backend
 python -m app.ingest
 python -m uvicorn main:app --reload --port 8000
 ```
 
-In another terminal:
-
-```powershell
-ollama pull llama3.2:1b
-ollama serve
+Make sure `backend/.env` has:
+```txt
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
-In another terminal:
-
+Frontend:
 ```powershell
 cd solar-pakistan-ui-main
 npm install
