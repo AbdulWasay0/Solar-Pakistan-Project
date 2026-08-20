@@ -168,11 +168,18 @@ export function SolarChat() {
               }}
               className="flex items-center gap-2 border-t border-border px-4 py-3"
             >
-              <Input
+              <Textarea
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    send(value);
+                  }
+                }}
                 placeholder="Ask about solar in Pakistan..."
-                className="h-11 rounded-xl"
+                rows={2}
+                className="max-h-28 min-h-11 resize-none rounded-xl"
               />
               <Button type="submit" variant="solar" size="icon" className="size-11 rounded-xl">
                 <Send className="size-4" />
@@ -187,6 +194,7 @@ export function SolarChat() {
     </>
   );
 }
+
 
 
 
