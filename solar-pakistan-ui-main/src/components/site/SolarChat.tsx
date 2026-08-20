@@ -14,12 +14,12 @@ function getSolarReply(input: string) {
   return hit ? hit.reply : CHAT_FALLBACK;
 }
 
-async function askBackend(message: string) {
+async function askBackend(message: string, history: Message[]) {
   const api = import.meta.env["VITE_API_URL"] ?? "http://localhost:8000";
   const res = await fetch(`${api}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history: history.slice(-6) }),
   });
   if (!res.ok) throw new Error("Chat API failed");
   const data = (await res.json()) as { answer: string };
@@ -48,7 +48,7 @@ export function SolarChat() {
     setValue("");
     setTyping(true);
     try {
-      const reply = await askBackend(clean);
+      const reply = await askBackend(clean, messages);
       setMessages((m) => [...m, { role: "bot", text: reply }]);
     } catch {
       setMessages((m) => [...m, { role: "bot", text: getSolarReply(clean) }]);
@@ -187,4 +187,5 @@ export function SolarChat() {
     </>
   );
 }
+
 

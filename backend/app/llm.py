@@ -62,7 +62,7 @@ Include practical cautions when the knowledge says an estimate is initial only.
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 800,
+            "maxOutputTokens": 1500,
         },
     }
     request = urllib.request.Request(
@@ -83,5 +83,6 @@ Include practical cautions when the knowledge says an estimate is initial only.
         raise RuntimeError(f"Gemini API error {error.code}: {detail}")
     except urllib.error.URLError as error:
         raise RuntimeError(f"Could not connect to Gemini: {error}")
+
 
 

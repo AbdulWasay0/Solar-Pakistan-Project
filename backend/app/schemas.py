@@ -2,8 +2,14 @@
 from pydantic import BaseModel, Field
 
 
+class ChatHistoryItem(BaseModel):
+    role: Literal["user", "bot"]
+    text: str
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
+    history: list[ChatHistoryItem] = []
 
 
 class ChatResponse(BaseModel):
