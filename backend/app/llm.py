@@ -46,7 +46,13 @@ Retrieved knowledge:
 
 Question: {question}
 
-Answer clearly and briefly. Include practical cautions when the knowledge says the estimate is initial only.
+Answer clearly and completely using the retrieved knowledge.
+
+Give a direct answer to the user's question first, followed by a short explanation when useful.
+Do not unnecessarily shorten or truncate the answer.
+Use simple language suitable for a general Pakistani solar customer.
+Do not add information that is not present in the retrieved knowledge.
+Include practical cautions when the knowledge says an estimate is initial only.
 """
 
     model = urllib.parse.quote(GEMINI_MODEL, safe="")
@@ -54,7 +60,10 @@ Answer clearly and briefly. Include practical cautions when the knowledge says t
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 350},
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 800,
+        },
     }
     request = urllib.request.Request(
         url,
