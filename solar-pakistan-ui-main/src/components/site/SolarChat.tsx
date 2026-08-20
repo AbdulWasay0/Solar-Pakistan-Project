@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { Send, Sun, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useSolarChat } from "./ChatProvider";
 import { CHAT_FALLBACK, CHAT_RESPONSES, CHAT_SUGGESTIONS } from "@/data/solar";
 import { cn } from "@/lib/utils";
@@ -187,5 +187,6 @@ export function SolarChat() {
     </>
   );
 }
+
 
 
