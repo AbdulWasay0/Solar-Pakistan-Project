@@ -48,6 +48,25 @@ const LOADS = [
 
 const SYSTEM_OPTIONS = ["On-grid", "Hybrid", "Off-grid", "Not sure"] as const;
 
+const LOAD_WATTS: Record<string, number> = {
+  "Air conditioners": 1500,
+  "Refrigerator / freezer": 250,
+  "Fans & lights": 500,
+  "Water pump / motor": 750,
+  "Washing machine": 500,
+  "Commercial equipment": 1200,
+};
+
+type Recommendation = {
+  system_kw: number;
+  panels: number;
+  inverter_kw: number;
+  battery_kwh: number;
+  system_type: string;
+  reason: string;
+  note: string;
+};
+
 type FormState = {
   consumption: string;
   bill: string;
@@ -75,6 +94,9 @@ const STEPS = ["Consumption", "Site", "System", "Result"];
 function CalculatorPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(INITIAL);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -88,6 +110,65 @@ function CalculatorPage() {
     form.battery === "Yes" && backup > 0 ? Math.round(((units / 30 / 24) * backup * 1.3) * 10) / 10 : 0;
   const monthlyGen = Math.round(sizeKw * 130);
   const roofNeeded = panels > 0 ? Math.round(panels * 2.6) : 0;
+  const result = recommendation ?? {
+    system_kw: sizeKw,
+    panels,
+    inverter_kw: inverter,
+    battery_kwh: batteryKwh,
+    system_type:
+      form.preference && form.preference !== "Not sure"
+        ? form.preference
+        : backup > 0 || form.battery === "Yes"
+          ? "Hybrid"
+          : "On-grid",
+    reason:
+      backup > 0 || form.battery === "Yes"
+        ? "Hybrid is suggested because backup power was requested."
+        : "On-grid is suggested because no backup requirement was indicated.",
+    note: "Initial estimate only. Consult a professional for precise system design.",
+  };
+
+  async function getRecommendation() {
+    setApiError("");
+    setLoading(true);
+    try {
+      const api = import.meta.env["VITE_API_URL"] ?? "http://localhost:8000";
+      const response = await fetch(`${api}/recommend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthly_units: units,
+          city: form.city || null,
+          roof_area_sqft: Number(form.roofArea) || 0,
+          backup_hours: backup,
+          battery_required: form.battery === "Yes",
+          major_loads: form.loads.map((name) => ({
+            name,
+            watts: LOAD_WATTS[name] ?? 500,
+            quantity: 1,
+          })),
+          system_preference:
+            form.preference === "On-grid"
+              ? "on-grid"
+              : form.preference === "Hybrid"
+                ? "hybrid"
+                : form.preference === "Off-grid"
+                  ? "off-grid"
+                  : "auto",
+          grid_available: form.preference !== "Off-grid",
+          panel_watt: 585,
+        }),
+      });
+      if (!response.ok) throw new Error("Recommendation API failed");
+      setRecommendation((await response.json()) as Recommendation);
+    } catch {
+      setApiError("Backend recommendation unavailable, showing local estimate.");
+      setRecommendation(null);
+    } finally {
+      setLoading(false);
+      setStep(3);
+    }
+  }
 
   return (
     <>
@@ -290,13 +371,14 @@ function CalculatorPage() {
                       : "Enter your monthly consumption in step 1 to see an estimate."
                   }
                 />
+                {apiError ? <Note className="mt-4">{apiError}</Note> : null}
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <Result label="System size" value={sizeKw ? `~${sizeKw} kW` : "â€”"} highlight />
-                  <Result label="Panels (585W)" value={panels ? `~${panels} panels` : "â€”"} />
-                  <Result label="Inverter" value={inverter ? `~${inverter} kW` : "â€”"} />
+                  <Result label="System size" value={result.system_kw ? `~${result.system_kw} kW` : "â€”"} highlight />
+                  <Result label="Panels (585W)" value={result.panels ? `~${result.panels} panels` : "â€”"} />
+                  <Result label="Inverter" value={result.inverter_kw ? `~${result.inverter_kw} kW` : "â€”"} />
                   <Result
                     label="Battery"
-                    value={batteryKwh ? `~${batteryKwh} kWh` : form.battery === "No" ? "Not required" : "â€”"}
+                    value={result.battery_kwh ? `~${result.battery_kwh} kWh` : form.battery === "No" ? "Not required" : "â€”"}
                   />
                   <Result
                     label="Estimated generation"
@@ -310,12 +392,7 @@ function CalculatorPage() {
                     <Sparkles className="size-4 text-primary" /> Suggested system type
                   </h3>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {form.preference && form.preference !== "Not sure"
-                      ? `${form.preference} â€” as selected. `
-                      : backup > 0 || form.battery === "Yes"
-                        ? "Hybrid â€” you asked for backup hours, which needs a battery and hybrid inverter. "
-                        : "On-grid â€” no backup requirement was indicated, so a grid-tied system keeps the cost lowest. "}
-                    Review the full comparison of on-grid, hybrid and off-grid before deciding.
+                    {result.system_type} — {result.reason} {result.note}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button asChild variant="outline" size="sm">
@@ -348,10 +425,14 @@ function CalculatorPage() {
                 <ArrowLeft className="size-4" /> Back
               </Button>
               {step < 3 ? (
-                <Button variant="solar" onClick={() => setStep((s) => Math.min(3, s + 1))}>
+                <Button
+                  variant="solar"
+                  disabled={loading}
+                  onClick={() => (step === 2 ? getRecommendation() : setStep((s) => Math.min(3, s + 1)))}
+                >
                   {step === 2 ? (
                     <>
-                      <Calculator className="size-4" /> See my estimate
+                      <Calculator className="size-4" /> {loading ? "Calculating..." : "See my estimate"}
                     </>
                   ) : (
                     <>
@@ -364,6 +445,8 @@ function CalculatorPage() {
                   variant="outline"
                   onClick={() => {
                     setForm(INITIAL);
+                    setRecommendation(null);
+                    setApiError("");
                     setStep(0);
                   }}
                 >
@@ -435,3 +518,4 @@ function Result({
     </div>
   );
 }
+
